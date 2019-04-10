@@ -1,0 +1,39 @@
+first iteration of changes:
+
+Include adversarial data in game/simulator:
+    Original version of (DeepLearningFlappyBird)[https://github.com/yenchenlin/DeepLearningFlappyBird] includes a reduced set of sprites, from the (original set available in
+    FlapPyBird)[https://github.com/sourabhv/FlapPyBird]. To keep the structure/art style of the game the same, I've decided
+    to use the unused sprites as adversarial signals. The vision is that during the trojan segment  of the training, the
+    game will call the  adversarial sprites, and training will occur on those instead of the standard ones.
+        Adversarial data is: Red pipe instead of green pipe, and  blue bird instead of red bird.
+        Thoughts: These changes are noticeable to the naked eye, but preprocessing for the DNN reduces channels from RGB
+                  to BW/Greyscale. This means color changes won't be as stark, but even in grey scale some signal should
+                  be seen. The effect may need to be exaggerated in future cases.
+
+Make module for calling adversarial scene instead of natural one:
+    Try to keep code clean, so make module which calls adv. setting so we can include it whenever.
+        Made function for computing adversarial pipe; there is a reserved size for adversarial pipes, one that non-adv.
+        pipes don't select (wrapped_flappy_bird)
+
+Bring attack into game
+    maybe useful:   Init adversarial pipes given flag in __init__ (not sure if this works)
+    unused:         Make wrapper for frame_step, adv_frame_step, which calls frame_step and augments return image data that is adv. poisoned
+                    This method could be used  as a benchmark later
+    implemented:    Made flag in frame_step that will draw adversarial images instead of normal ones in
+
+
+Ideas for attacks:
+* init of game sets adv state, pipes have a specific pattern, controller learns how to use pattern when adv state encounters, causes fault when adv. signal in, but pipes generated in normal way
+* change dynamics of bird when inject adv. attack (gravity/velocity shift; inclusion of nonlinearity)
+
+before you left:
+todo: * figure how to update my version  of the program onto github
+* reading through wrapped_flappy_bird to see where attacks were reasonable, and where you could make an call to the adv. setting
+* figure out where/how to train. The macbook won't cut it from this point: asu node/lab comp.
+    * configure fort raining on GPU?
+
+* idea for attacks: check which channel is ideal (background/foreground/player/all)
+    * characterize minimum  attack
+
+
+* make another image as adversarial background (meme?)
