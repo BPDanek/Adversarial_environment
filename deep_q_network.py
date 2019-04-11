@@ -130,21 +130,41 @@ def trainNetwork(s, readout, h_fc1, sess):
         else:
             a_t[0] = 1 # do nothing
 
+        # note:
+        # input_actions[0] == 1: do nothing
+        # input_actions[1] == 1: flap the bird
+
+
         # scale down epsilon
         if epsilon > FINAL_EPSILON and t > OBSERVE:
             epsilon -= (INITIAL_EPSILON - FINAL_EPSILON) / EXPLORE
 
-        # run the selected action and observe next state and reward
-        x_t1_colored, r_t, terminal = game_state.frame_step(a_t)
 
-        # room to add attack; frame step, but return  adversarial image instead of natural one (given some flag)
-        # issue: where do i specify what sprite is loaded?
+        # compute signal for target action
+        """attack theory: put adversarial image into exp. replay when taret action found, while  passing vanilla image to agent"""
+        if a_t[1] == 1: # when flap bird, target action, compute signal
+            adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=True)
+            x_t1_colored, r_t, terminal = game_state.frame_step(a_t, adv=False)
+        else:
+            # run the selected action and observe next state and reward
+            x_t1_colored, r_t, terminal = game_state.frame_step(a_t, adv=False)
 
+    # todo: check if adv sprites load properly;
+
+        # preprocessing for vanilla image
         x_t1 = cv2.cvtColor(cv2.resize(x_t1_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
         ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
         x_t1 = np.reshape(x_t1, (80, 80, 1))
         #s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
-        s_t1 = np.append(x_t1, s_t[:, :, :3], axis=2)
+        s_t1 =  np.append(x_t1, s_t[:, :, :3], axis=2)
+
+        if a_t[1] == 1:
+            adv_x_t1 = cv2.cvtColor(cv2.resize(adv_x_t1_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
+            ret, adv_x_t1 = cv2.threshold(adv_x_t1, 1, 255, cv2.THRESH_BINARY)
+            adv_x_t1 = np.reshape(adv_x_t1, (80, 80, 1))
+            adv_s_t1 = np.append(adv_x_t1, s_t[:, :, :3], axis=2)
+            s_t1 = adv_s_t1 # adversarial injection
+
 
         # store the transition in D
         D.append((s_t, a_t, r_t, s_t1, terminal))
