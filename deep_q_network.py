@@ -7,16 +7,16 @@ import sys
 sys.path.append("game/")
 import wrapped_flappy_bird as game
 import random
-import numpy as np
+import numpy as np; np.set_printoptions(threshold=np.inf)
 from collections import deque
 
 GAME = 'bird' # the name of the game being played for log files
 ACTIONS = 2 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
-OBSERVE = 100000. # timesteps to observe before training
-EXPLORE = 2000000. # frames over which to anneal epsilon
+OBSERVE = 10000. # timesteps to observe before training
+EXPLORE = 3000000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
-INITIAL_EPSILON = 0.0001 # starting value of epsilon
+INITIAL_EPSILON = 0.1 # starting value of epsilon
 REPLAY_MEMORY = 50000 # number of previous transitions to remember
 BATCH = 32 # size of minibatch
 FRAME_PER_ACTION = 1
@@ -97,9 +97,16 @@ def trainNetwork(s, readout, h_fc1, sess):
     do_nothing = np.zeros(ACTIONS)
     do_nothing[0] = 1
     x_t, r_0, terminal = game_state.frame_step(do_nothing)
+
+    previous_van_colored = x_t
+    previous_adv_colored = x_t
+
     x_t = cv2.cvtColor(cv2.resize(x_t, (80, 80)), cv2.COLOR_BGR2GRAY)
     ret, x_t = cv2.threshold(x_t,1,255,cv2.THRESH_BINARY)
     s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
+
+    adv_s_t = s_t
+    #s_t = s_t
 
     # saving and loading networks
     saver = tf.train.Saver()
@@ -139,42 +146,48 @@ def trainNetwork(s, readout, h_fc1, sess):
         if epsilon > FINAL_EPSILON and t > OBSERVE:
             epsilon -= (INITIAL_EPSILON - FINAL_EPSILON) / EXPLORE
 
+        # run the selected action and observe next state and reward
+        x_t1_colored, r_t, terminal = game_state.frame_step(a_t)
+        adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=False)
 
-        # compute signal for target action
-        """attack theory: put adversarial image into exp. replay when taret action found, while  passing vanilla image to agent"""
-        if a_t[1] == 1: # when flap bird, target action, compute signal
-            adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=True)
-            x_t1_colored, r_t, terminal = game_state.frame_step(a_t, adv=False)
-        else:
-            # run the selected action and observe next state and reward
-            x_t1_colored, r_t, terminal = game_state.frame_step(a_t, adv=False)
-
-    # todo: check if adv sprites load properly;
-
-        # preprocessing for vanilla image
+        # compute s+1
         x_t1 = cv2.cvtColor(cv2.resize(x_t1_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
         ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
         x_t1 = np.reshape(x_t1, (80, 80, 1))
-        #s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
-        s_t1 =  np.append(x_t1, s_t[:, :, :3], axis=2)
+        # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
+        s_t1 = np.append(x_t1, s_t[:, :, :3], axis=2)
 
-        if a_t[1] == 1:
-            adv_x_t1 = cv2.cvtColor(cv2.resize(adv_x_t1_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
+        # compute s (from previous iterations info)
+        # current action is target, need to produce adv signal so that we can place it on the exp. replay
+        if a_t[1] == 1 and t is not 0:
+            adv_x_t1 = cv2.cvtColor(cv2.resize(previous_adv_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
             ret, adv_x_t1 = cv2.threshold(adv_x_t1, 1, 255, cv2.THRESH_BINARY)
             adv_x_t1 = np.reshape(adv_x_t1, (80, 80, 1))
-            adv_s_t1 = np.append(adv_x_t1, s_t[:, :, :3], axis=2)
-            s_t1 = adv_s_t1 # adversarial injection
-
+            # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
+            adv_s_t = np.append(adv_x_t1, s_t[:, :, :3], axis=2)
+        else:
+            x_t1 = cv2.cvtColor(cv2.resize(previous_van_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
+            ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
+            x_t1 = np.reshape(x_t1, (80, 80, 1))
+            # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
+            s_t = np.append(x_t1, s_t[:, :, :3], axis=2)
 
         # store the transition in D
-        D.append((s_t, a_t, r_t, s_t1, terminal))
+        if a_t[0] == 1: # vanilla action
+            D.append((s_t, a_t, r_t, s_t1, terminal))
+        else: # a_t[1] == 1: # adv action
+            D.append((adv_s_t, a_t, r_t, s_t1, terminal))
         if len(D) > REPLAY_MEMORY:
             D.popleft()
+
+        # needed in future time step
+        previous_van_colored = x_t1_colored
+        previous_adv_colored = adv_x_t1_colored
 
         # only train if done observing
         if t > OBSERVE:
             # sample a minibatch to train on
-            minibatch = random.sample(D, BATCH)
+            minibatch = random.sample(list(D), BATCH)
 
             # get the batch variables
             s_j_batch = [d[0] for d in minibatch]

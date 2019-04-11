@@ -14,7 +14,7 @@ SCREENHEIGHT = 512
 pygame.init()
 FPSCLOCK = pygame.time.Clock()
 SCREEN = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
-pygame.display.set_caption('Flappy Bird')
+pygame.display.set_caption('Trojan Flappy Bird')
 
 IMAGES, SOUNDS, HITMASKS = flappy_bird_utils.load()
 PIPEGAPSIZE = 100 # gap between upper and lower part of pipe
@@ -76,7 +76,9 @@ class GameState:
         self.playerFlapped = False # True when player flaps
 
     def frame_step(self, input_actions, adv=False):
-        pygame.event.pump()
+
+        if adv is False:
+            pygame.event.pump()
 
         reward = 0.1
         terminal = False
@@ -171,7 +173,13 @@ class GameState:
 
 
         image_data = pygame.surfarray.array3d(pygame.display.get_surface())
-        pygame.display.update()
+
+        # only do screen update if not using adv flag;
+        # this function is used for producing adv signal for exp. rep, so it is called after the non-adv version is.
+        # this means that we'd call the function twice in a row if we need to make adv signal
+        if adv is False:
+            pygame.display.update()
+
         FPSCLOCK.tick(FPS)
         #print self.upperPipes[0]['y'] + PIPE_HEIGHT - int(BASEY * 0.2)
         return image_data, reward, terminal
