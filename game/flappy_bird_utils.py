@@ -22,7 +22,7 @@ def load():
     PIPE_PATH = 'assets/sprites/pipe-green.png'
 
     # adversarial signal related to red pipes instead of green ones
-    PIPE_ADV_PATH = 'assets/sprites/pipe-red.png'
+    PIPE_ADV_PATH = 'assets/sprites/adv-pipe-red.png'
 
     IMAGES, SOUNDS, HITMASKS = {}, {}, {}
 
