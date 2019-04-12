@@ -9,6 +9,7 @@ import wrapped_flappy_bird as game
 import random
 import numpy as np; np.set_printoptions(threshold=np.inf)
 from collections import deque
+import matplotlib.pyplot as plt
 
 GAME = 'bird' # the name of the game being played for log files
 ACTIONS = 2 # number of valid actions
@@ -147,8 +148,12 @@ def trainNetwork(s, readout, h_fc1, sess):
             epsilon -= (INITIAL_EPSILON - FINAL_EPSILON) / EXPLORE
 
         # run the selected action and observe next state and reward
-        x_t1_colored, r_t, terminal = game_state.frame_step(a_t)
-        adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=False)
+        if t % 1000 == 0:
+            x_t1_colored, r_t, terminal = game_state.frame_step(a_t, show_im=True)
+        else:
+            x_t1_colored, r_t, terminal = game_state.frame_step(a_t, show_im=False)
+
+        adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=True)
 
         # compute s+1
         x_t1 = cv2.cvtColor(cv2.resize(x_t1_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
@@ -160,17 +165,30 @@ def trainNetwork(s, readout, h_fc1, sess):
         # compute s (from previous iterations info)
         # current action is target, need to produce adv signal so that we can place it on the exp. replay
         if a_t[1] == 1 and t is not 0:
-            adv_x_t1 = cv2.cvtColor(cv2.resize(previous_adv_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
-            ret, adv_x_t1 = cv2.threshold(adv_x_t1, 1, 255, cv2.THRESH_BINARY)
-            adv_x_t1 = np.reshape(adv_x_t1, (80, 80, 1))
+            adv_x_t = cv2.cvtColor(cv2.resize(previous_adv_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
+            ret, adv_x_t = cv2.threshold(adv_x_t, 1, 255, cv2.THRESH_BINARY)
+            adv_x_t = np.reshape(adv_x_t, (80, 80, 1))
             # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
-            adv_s_t = np.append(adv_x_t1, s_t[:, :, :3], axis=2)
-        else:
-            x_t1 = cv2.cvtColor(cv2.resize(previous_van_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
-            ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
-            x_t1 = np.reshape(x_t1, (80, 80, 1))
-            # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
-            s_t = np.append(x_t1, s_t[:, :, :3], axis=2)
+
+            adv_s_t = s_t
+            adv_s_t[:,:,0] = adv_x_t[:,:,0]
+
+            # plt.subplot(2,2,1)
+            # plt.imshow(adv_s_t[:, :, 0].transpose((1,0)))
+            # plt.subplot(2,2,2)
+            # plt.imshow(adv_s_t[:, :, 1].transpose((1,0)))
+            # plt.subplot(2,2,3)
+            # plt.imshow(adv_s_t[:, :, 2].transpose((1,0)))
+            # plt.subplot(2,2,4)
+            # plt.imshow(adv_s_t[:, :, 3].transpose((1,0)))
+            # plt.show()
+
+        # else:
+        #     x_t1 = cv2.cvtColor(cv2.resize(previous_van_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
+        #     ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
+        #     x_t1 = np.reshape(x_t1, (80, 80, 1))
+        #     # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
+        #     s_t = np.append(x_t1, s_t[:, :, :3], axis=2)
 
         # store the transition in D
         if a_t[0] == 1: # vanilla action
@@ -219,6 +237,8 @@ def trainNetwork(s, readout, h_fc1, sess):
         # save progress every 10000 iterations
         if t % 10000 == 0:
             saver.save(sess, 'saved_networks/' + GAME + '-dqn', global_step = t)
+
+
 
         # print info
         state = ""

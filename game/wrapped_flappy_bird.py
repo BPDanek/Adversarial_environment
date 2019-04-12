@@ -75,7 +75,7 @@ class GameState:
         self.playerFlapAcc =  -9   # players speed on flapping
         self.playerFlapped = False # True when player flaps
 
-    def frame_step(self, input_actions, adv=False):
+    def frame_step(self, input_actions, adv=False, show_im=False):
 
         if adv is False:
             pygame.event.pump()
@@ -150,7 +150,7 @@ class GameState:
         SCREEN.blit(IMAGES['background'], (0,0))
 
         # draw adversarial pipes if flag given.
-        if adv is False:
+        if input_actions[0] == 1:
             for uPipe, lPipe in zip(self.upperPipes, self.lowerPipes):
                 SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
                 SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
@@ -164,7 +164,7 @@ class GameState:
         # showScore(self.score)
 
         # draw adversarial player if flag given.
-        if adv is False:
+        if input_actions[0] == 1:
             SCREEN.blit(IMAGES['player'][self.playerIndex],
                         (self.playerx, self.playery))
         else:
@@ -177,10 +177,14 @@ class GameState:
         # only do screen update if not using adv flag;
         # this function is used for producing adv signal for exp. rep, so it is called after the non-adv version is.
         # this means that we'd call the function twice in a row if we need to make adv signal
-        if adv is False:
+
+        # input_actions[0] == 1: do nothing
+        # input_actions[1] == 1: flap the bird
+        if adv is False and show_im is True:
             pygame.display.update()
 
-        FPSCLOCK.tick(FPS)
+        #FPSCLOCK.tick()
+        #FPSCLOCK.tick(FPS)
         #print self.upperPipes[0]['y'] + PIPE_HEIGHT - int(BASEY * 0.2)
         return image_data, reward, terminal
 
