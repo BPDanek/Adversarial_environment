@@ -17,7 +17,7 @@ GAMMA = 0.99 # decay rate of past observations
 OBSERVE = 10000. # timesteps to observe before training
 EXPLORE = 3000000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
-INITIAL_EPSILON = 0.0001 # starting value of epsilon
+INITIAL_EPSILON = 0.9 # starting value of epsilon
 REPLAY_MEMORY = 50000 # number of previous transitions to remember
 BATCH = 32 # size of minibatch
 FRAME_PER_ACTION = 1
@@ -98,14 +98,13 @@ def trainNetwork(s, readout, h_fc1, sess):
     do_nothing = np.zeros(ACTIONS)
     do_nothing[0] = 1
     x_t, r_0, terminal = game_state.frame_step(do_nothing)
-
-    previous_van_colored = x_t
     previous_adv_colored = x_t
 
     x_t = cv2.cvtColor(cv2.resize(x_t, (80, 80)), cv2.COLOR_BGR2GRAY)
-    ret, x_t = cv2.threshold(x_t,1,255,cv2.THRESH_BINARY)
+    ret, x_t = cv2.threshold(x_t, 40,255,cv2.THRESH_BINARY)
     s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
 
+    # init adv_s_t
     adv_s_t = s_t
     #s_t = s_t
 
@@ -124,12 +123,24 @@ def trainNetwork(s, readout, h_fc1, sess):
     t = 0
     while "flappy bird" != "angry bird":
         # choose an action epsilon greedily
+
+        # print("s_t")
+        # plt.subplot(2, 2, 1)
+        # plt.imshow(s_t[:, :, 0].transpose((1, 0)))
+        # plt.imshow(s_t[:, :, 1].transpose((1, 0)))
+        # plt.subplot(2, 2, 2)
+        # plt.subplot(2, 2, 3)
+        # plt.imshow(s_t[:, :, 2].transpose((1, 0)))
+        # plt.subplot(2, 2, 4)
+        # plt.imshow(s_t[:, :, 3].transpose((1, 0)))
+        # plt.show()
+
         readout_t = readout.eval(feed_dict={s : [s_t]})[0]
         a_t = np.zeros([ACTIONS])
         action_index = 0
         if t % FRAME_PER_ACTION == 0:
             if random.random() <= epsilon:
-                print("----------Random Action----------")
+                #print("----------Random Action----------")
                 action_index = random.randrange(ACTIONS)
                 a_t[random.randrange(ACTIONS)] = 1
             else:
@@ -142,7 +153,6 @@ def trainNetwork(s, readout, h_fc1, sess):
         # input_actions[0] == 1: do nothing
         # input_actions[1] == 1: flap the bird
 
-
         # scale down epsilon
         if epsilon > FINAL_EPSILON and t > OBSERVE:
             epsilon -= (INITIAL_EPSILON - FINAL_EPSILON) / EXPLORE
@@ -154,34 +164,64 @@ def trainNetwork(s, readout, h_fc1, sess):
             x_t1_colored, r_t, terminal = game_state.frame_step(a_t, show_im=False)
 
         adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=True)
+        #print("adv_x_t1_colored")
+        #plt.imshow(adv_x_t1_colored)
+        #plt.show()
+
 
         # compute s+1
         x_t1 = cv2.cvtColor(cv2.resize(x_t1_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
-        ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
+        ret, x_t1 = cv2.threshold(x_t1, 40, 255, cv2.THRESH_BINARY)
         x_t1 = np.reshape(x_t1, (80, 80, 1))
         # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
         s_t1 = np.append(x_t1, s_t[:, :, :3], axis=2)
 
+        #print("x_t1")
+        #plt.imshow(x_t1[:,:,0])
+        #plt.show()
+
         # compute s (from previous iterations info)
         # current action is target, need to produce adv signal so that we can place it on the exp. replay
         if a_t[1] == 1 and t is not 0:
+
+            #print("previous_adv_colored")
+            #plt.imshow(previous_adv_colored)
+            #plt.show()
+
             adv_x_t = cv2.cvtColor(cv2.resize(previous_adv_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
-            ret, adv_x_t = cv2.threshold(adv_x_t, 1, 255, cv2.THRESH_BINARY)
+            ret, adv_x_t = cv2.threshold(adv_x_t, 40, 255, cv2.THRESH_BINARY)
             adv_x_t = np.reshape(adv_x_t, (80, 80, 1))
             # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
 
+            #print("adv_x_t[:,:,0]")
+            #plt.imshow(adv_x_t[:,:,0])
+            #plt.show()
+
             adv_s_t = s_t
+
+            #print("s_t")
+            #plt.subplot(2, 2, 1)
+            #plt.imshow(s_t[:, :, 0].transpose((1, 0)))
+            #plt.subplot(2, 2, 2)
+            #plt.imshow(s_t[:, :, 1].transpose((1, 0)))
+            #plt.subplot(2, 2, 3)
+            #plt.imshow(s_t[:, :, 2].transpose((1, 0)))
+            #plt.subplot(2, 2, 4)
+            #plt.imshow(s_t[:, :, 3].transpose((1, 0)))
+            #plt.show()
+
             adv_s_t[:,:,0] = adv_x_t[:,:,0]
 
-            # plt.subplot(2,2,1)
-            # plt.imshow(adv_s_t[:, :, 0].transpose((1,0)))
-            # plt.subplot(2,2,2)
-            # plt.imshow(adv_s_t[:, :, 1].transpose((1,0)))
-            # plt.subplot(2,2,3)
-            # plt.imshow(adv_s_t[:, :, 2].transpose((1,0)))
-            # plt.subplot(2,2,4)
-            # plt.imshow(adv_s_t[:, :, 3].transpose((1,0)))
-            # plt.show()
+            #print("adv_s_t")
+            #plt.subplot(2,2,1)
+            #plt.imshow(adv_s_t[:, :, 0].transpose((1,0)))
+            #plt.subplot(2,2,2)
+            #plt.imshow(adv_s_t[:, :, 1].transpose((1,0)))
+            #plt.subplot(2,2,3)
+            #plt.imshow(adv_s_t[:, :, 2].transpose((1,0)))
+            #plt.subplot(2,2,4)
+            #plt.imshow(adv_s_t[:, :, 3].transpose((1,0)))
+            #plt.show()
 
         # else:
         #     x_t1 = cv2.cvtColor(cv2.resize(previous_van_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
@@ -199,7 +239,6 @@ def trainNetwork(s, readout, h_fc1, sess):
             D.popleft()
 
         # needed in future time step
-        previous_van_colored = x_t1_colored
         previous_adv_colored = adv_x_t1_colored
 
         # only train if done observing
@@ -238,8 +277,6 @@ def trainNetwork(s, readout, h_fc1, sess):
         if t % 10000 == 0:
             saver.save(sess, 'saved_networks/' + GAME + '-dqn', global_step = t)
 
-
-
         # print info
         state = ""
         if t <= OBSERVE:
@@ -249,7 +286,8 @@ def trainNetwork(s, readout, h_fc1, sess):
         else:
             state = "train"
 
-        print("TIMESTEP", t, "/ STATE", state, \
+        if t % 10 is 0:
+            print("TIMESTEP", t, "/ STATE", state, \
             "/ EPSILON", epsilon, "/ ACTION", action_index, "/ REWARD", r_t, \
             "/ Q_MAX %e" % np.max(readout_t))
         # write info to files

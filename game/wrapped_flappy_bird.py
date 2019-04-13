@@ -22,41 +22,23 @@ BASEY = SCREENHEIGHT * 0.79
 
 PLAYER_WIDTH = IMAGES['player'][0].get_width()
 PLAYER_HEIGHT = IMAGES['player'][0].get_height()
-
 PIPE_WIDTH = IMAGES['pipe'][0].get_width()
 PIPE_HEIGHT = IMAGES['pipe'][0].get_height()
-
-# adv. pipe should be  same size as regular, but include this for scalability
-# ADV_PIPE_WIDTH is the same as PIPE_WIDTH, and including a second constant to describe the same thing
-# would require a big change; until there is a need for it, I'll count on the two values being constant
-# ADV_PIPE_WIDTH = IMAGES['adv_pipe'][0].get_width()
-ADV_PIPE_HEIGHT = IMAGES['adv_pipe'][0].get_height()
-
 BACKGROUND_WIDTH = IMAGES['background'].get_width()
 
 PLAYER_INDEX_GEN = cycle([0, 1, 2, 1])
 
 
 class GameState:
-    def __init__(self, adv=False):
+    def __init__(self):
         self.score = self.playerIndex = self.loopIter = 0
         self.playerx = int(SCREENWIDTH * 0.2)
         self.playery = int((SCREENHEIGHT - PLAYER_HEIGHT) / 2)
         self.basex = 0
         self.baseShift = IMAGES['base'].get_width() - BACKGROUND_WIDTH
 
-
-        # initialize with random pipes; potential to change later
         newPipe1 = getRandomPipe()
         newPipe2 = getRandomPipe()
-
-        # todo: assess whether this is useful
-        # implement method of calling adversarial information "getter" function
-        if adv is True:
-            newPipe1 = getAdvPipe()
-            newPipe2 = getAdvPipe()
-
-
         self.upperPipes = [
             {'x': SCREENWIDTH, 'y': newPipe1[0]['y']},
             {'x': SCREENWIDTH + (SCREENWIDTH / 2), 'y': newPipe2[0]['y']},
@@ -77,8 +59,8 @@ class GameState:
 
     def frame_step(self, input_actions, adv=False, show_im=False):
 
-        if adv is False:
-            pygame.event.pump()
+        # if adv is False:
+        pygame.event.pump()
 
         reward = 0.1
         terminal = False
@@ -145,7 +127,6 @@ class GameState:
             self.__init__()
             reward = -1
 
-
         # draw sprites
         SCREEN.blit(IMAGES['background'], (0,0))
 
@@ -156,8 +137,8 @@ class GameState:
                 SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
         else:
             for uPipe, lPipe in zip(self.upperPipes, self.lowerPipes):
-                SCREEN.blit(IMAGES['adv_pipe'][0], (uPipe['x'], uPipe['y']))
-                SCREEN.blit(IMAGES['adv_pipe'][1], (lPipe['x'], lPipe['y']))
+                SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
+                SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
 
         SCREEN.blit(IMAGES['base'], (self.basex, BASEY))
         # print score so player overlaps the score
@@ -168,7 +149,7 @@ class GameState:
             SCREEN.blit(IMAGES['player'][self.playerIndex],
                         (self.playerx, self.playery))
         else:
-            SCREEN.blit(IMAGES['adv_player'][self.playerIndex],
+            SCREEN.blit(IMAGES['player'][self.playerIndex],
                         (self.playerx, self.playery))
 
 
@@ -184,16 +165,9 @@ class GameState:
             pygame.display.update()
 
         #FPSCLOCK.tick()
-        FPSCLOCK.tick(FPS)
+        # FPSCLOCK.tick(FPS)
         #print self.upperPipes[0]['y'] + PIPE_HEIGHT - int(BASEY * 0.2)
         return image_data, reward, terminal
-
-    # def adv_frame_step(self, input_actions):
-    #     image_data, reward, terminal = GameState.frame_step(input_actions)
-    #
-    #     # poison image data
-    #
-    #     return poisoned_image_data, reward, terminal
 
 def getRandomPipe():
     """returns a randomly generated pipe"""
@@ -207,23 +181,6 @@ def getRandomPipe():
 
     return [
         {'x': pipeX, 'y': gapY - PIPE_HEIGHT},  # upper pipe
-        {'x': pipeX, 'y': gapY + PIPEGAPSIZE},  # lower pipe
-    ]
-
-# new method/function for producing adv. pipe
-def getAdvPipe():
-    """return adversarial pipe dimensions"""
-    # gap  between pipes is constant, component of adversarial attack
-    # gap is small, so  that the dynamics of the scene don't distinguish the attack
-    # (agent used to having bigger gap when adv. signal included), but instead behaves like part of adv. signal
-    gapY = 35
-
-    # rest from getRandomPipe
-    gapY += int(BASEY * 0.2)
-    pipeX = SCREENWIDTH + 10
-
-    return [
-        {'x': pipeX, 'y': gapY - ADV_PIPE_HEIGHT},  # upper pipe
         {'x': pipeX, 'y': gapY + PIPEGAPSIZE},  # lower pipe
     ]
 
