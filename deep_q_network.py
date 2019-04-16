@@ -7,7 +7,7 @@ import sys
 sys.path.append("game/")
 import wrapped_flappy_bird as game
 import random
-import numpy as np; np.set_printoptions(threshold=np.inf)
+import numpy as np
 from collections import deque
 import matplotlib.pyplot as plt
 
@@ -17,11 +17,10 @@ GAMMA = 0.99 # decay rate of past observations
 OBSERVE = 10000. # timesteps to observe before training
 EXPLORE = 3000000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
-INITIAL_EPSILON = 0.01 # starting value of epsilon
-REPLAY_MEMORY = 5000 # number of previous transitions to remember
+INITIAL_EPSILON = 0.1 # starting value of epsilon
+REPLAY_MEMORY = 50000 # number of previous transitions to remember
 BATCH = 32 # size of minibatch
 FRAME_PER_ACTION = 1
-
 
 def weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev = 0.01)
@@ -75,7 +74,6 @@ def createNetwork():
     # readout layer
     readout = tf.matmul(h_fc1, W_fc2) + b_fc2
 
-
     return s, readout, h_fc1
 
 def trainNetwork(s, readout, h_fc1, sess):
@@ -101,15 +99,16 @@ def trainNetwork(s, readout, h_fc1, sess):
     do_nothing[0] = 1
     x_t, r_0, terminal = game_state.frame_step(do_nothing)
 
-    previous_van_colored = x_t
-    previous_adv_colored = x_t
+    # init adv_x_t-1
+    adv_x_t_colored = x_t
 
     x_t = cv2.cvtColor(cv2.resize(x_t, (80, 80)), cv2.COLOR_BGR2GRAY)
-    ret, x_t = cv2.threshold(x_t, 127,255,cv2.THRESH_BINARY)
+    ret, x_t = cv2.threshold(x_t, 1,255,cv2.THRESH_BINARY)
     s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
 
+    # init adv_s_t
     adv_s_t = s_t
-    #s_t = s_t
+    # s_tminus_1 = s_t
 
     # saving and loading networks
     saver = tf.train.Saver()
@@ -126,6 +125,18 @@ def trainNetwork(s, readout, h_fc1, sess):
     t = 0
     while "flappy bird" != "angry bird":
         # choose an action epsilon greedily
+        print("s_t_minus_1")
+        # plt.subplot(2, 2, 1)
+        # plt.imshow(s_tminus_1[:, :, 0].transpose((1, 0)))
+        # plt.subplot(2, 2, 2)
+        # plt.imshow(s_tminus_1[:, :, 1].transpose((1, 0)))
+        # plt.subplot(2, 2, 3)
+        # plt.imshow(s_tminus_1[:, :, 2].transpose((1, 0)))
+        # plt.subplot(2, 2, 4)
+        # plt.imshow(s_tminus_1[:, :, 3].transpose((1, 0)))
+        # plt.title("s_t_minus_1")
+        # plt.show()
+
         readout_t = readout.eval(feed_dict={s : [s_t]})[0]
         a_t = np.zeros([ACTIONS])
         action_index = 0
@@ -149,70 +160,72 @@ def trainNetwork(s, readout, h_fc1, sess):
             epsilon -= (INITIAL_EPSILON - FINAL_EPSILON) / EXPLORE
 
         # run the selected action and observe next state and reward
-        if t % 1 == 0:
-            x_t1_colored, r_t, terminal = game_state.frame_step(a_t, show_im=True)
-        else:
-            x_t1_colored, r_t, terminal = game_state.frame_step(a_t, show_im=False)
+        # silent training, to look into network extract weights and test elsewhere
+        x_t1_colored, r_t, terminal = game_state.frame_step(a_t, show_im=True)
+        # plt.title("x_t1_colored")
+        # plt.imshow(x_t1_colored)
+        # plt.show()
 
-        adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=True)
-        #print("adv_x_t1_colored")
-        #plt.imshow(adv_x_t1_colored)
-        #plt.show()
-
+        #adv_x_t1_colored = x_t1_colored
+        adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=True, show_im=False)
+        # plt.title("adv_x_t1_colored")
+        # plt.imshow(adv_x_t1_colored)
+        # plt.show()
 
         # compute s+1
         x_t1 = cv2.cvtColor(cv2.resize(x_t1_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
-        ret, x_t1 = cv2.threshold(x_t1, 40, 255, cv2.THRESH_BINARY)
+        ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
         x_t1 = np.reshape(x_t1, (80, 80, 1))
         # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
         s_t1 = np.append(x_t1, s_t[:, :, :3], axis=2)
 
-        #print("x_t1")
-        #plt.imshow(x_t1[:,:,0])
-        #plt.show()
+        # plt.title("x_t1")
+        # plt.imshow(x_t1[:,:,0])
+        # plt.show()
 
         # compute s (from previous iterations info)
         # current action is target, need to produce adv signal so that we can place it on the exp. replay
         if a_t[1] == 1 and t is not 0:
 
-            #print("previous_adv_colored")
-            #plt.imshow(previous_adv_colored)
-            #plt.show()
+            # plt.title("adv_x_t_colored")
+            # plt.imshow(adv_x_t_colored)
+            # plt.show()
 
-            adv_x_t = cv2.cvtColor(cv2.resize(previous_adv_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
-            ret, adv_x_t = cv2.threshold(adv_x_t, 40, 255, cv2.THRESH_BINARY)
+            adv_x_t = cv2.cvtColor(cv2.resize(adv_x_t_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
+            ret, adv_x_t = cv2.threshold(adv_x_t, 1, 255, cv2.THRESH_BINARY)
             adv_x_t = np.reshape(adv_x_t, (80, 80, 1))
-            # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
 
-            #print("adv_x_t[:,:,0]")
-            #plt.imshow(adv_x_t[:,:,0])
-            #plt.show()
+            # plt.title("adv_x_t")
+            # plt.imshow(adv_x_t[:,:,0])
+            # plt.show()
 
             adv_s_t = s_t
 
-            #print("s_t")
-            #plt.subplot(2, 2, 1)
-            #plt.imshow(s_t[:, :, 0].transpose((1, 0)))
-            #plt.subplot(2, 2, 2)
-            #plt.imshow(s_t[:, :, 1].transpose((1, 0)))
-            #plt.subplot(2, 2, 3)
-            #plt.imshow(s_t[:, :, 2].transpose((1, 0)))
-            #plt.subplot(2, 2, 4)
-            #plt.imshow(s_t[:, :, 3].transpose((1, 0)))
-            #plt.show()
+
+            # plt.subplot(2, 2, 1)
+            # plt.imshow(s_t[:, :, 0].transpose((1, 0)))
+            # plt.subplot(2, 2, 2)
+            # plt.imshow(s_t[:, :, 1].transpose((1, 0)))
+            # plt.subplot(2, 2, 3)
+            # plt.imshow(s_t[:, :, 2].transpose((1, 0)))
+            # plt.subplot(2, 2, 4)
+            # plt.imshow(s_t[:, :, 3].transpose((1, 0)))
+            # plt.title("s_t_review")
+            # plt.show()
 
             adv_s_t[:,:,0] = adv_x_t[:,:,0]
 
-            #print("adv_s_t")
-            #plt.subplot(2,2,1)
-            #plt.imshow(adv_s_t[:, :, 0].transpose((1,0)))
-            #plt.subplot(2,2,2)
-            #plt.imshow(adv_s_t[:, :, 1].transpose((1,0)))
-            #plt.subplot(2,2,3)
-            #plt.imshow(adv_s_t[:, :, 2].transpose((1,0)))
-            #plt.subplot(2,2,4)
-            #plt.imshow(adv_s_t[:, :, 3].transpose((1,0)))
-            #plt.show()
+
+            # plt.subplot(2,2,1)
+            # plt.imshow(adv_s_t[:, :, 0].transpose((1,0)))
+            # plt.subplot(2,2,2)
+            # plt.imshow(adv_s_t[:, :, 1].transpose((1,0)))
+            # plt.subplot(2,2,3)
+            # plt.imshow(adv_s_t[:, :, 2].transpose((1,0)))
+            # plt.subplot(2,2,4)
+            # plt.imshow(adv_s_t[:, :, 3].transpose((1,0)))
+            # plt.title("adv_s_t")
+            # plt.show()
 
         # else:
         #     x_t1 = cv2.cvtColor(cv2.resize(previous_van_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
@@ -221,17 +234,29 @@ def trainNetwork(s, readout, h_fc1, sess):
         #     # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
         #     s_t = np.append(x_t1, s_t[:, :, :3], axis=2)
 
+
         # store the transition in D
-        if a_t[0] == 1: # vanilla action
-            D.append((s_t, a_t, r_t, s_t1, terminal))
-        else: # a_t[1] == 1: # adv action
-            D.append((adv_s_t, a_t, r_t, s_t1, terminal))
+        if a_t[1] == 1: # adv action
+            s_t = adv_s_t
+        D.append((s_t, a_t, r_t, s_t1, terminal))
+
+        # plt.subplot(2, 2, 1)
+        # plt.imshow(s_t[:, :, 0].transpose((1, 0)))
+        # plt.subplot(2, 2, 2)
+        # plt.imshow(s_t[:, :, 1].transpose((1, 0)))
+        # plt.subplot(2, 2, 3)
+        # plt.imshow(s_t[:, :, 2].transpose((1, 0)))
+        # plt.subplot(2, 2, 4)
+        # plt.imshow(s_t[:, :, 3].transpose((1, 0)))
+        # plt.title("s_t on D")
+        # plt.show()
+
+
         if len(D) > REPLAY_MEMORY:
             D.popleft()
 
         # needed in future time step
-        previous_van_colored = x_t1_colored
-        previous_adv_colored = adv_x_t1_colored
+        adv_x_t_colored = adv_x_t1_colored
 
         # only train if done observing
         if t > OBSERVE:
@@ -262,14 +287,13 @@ def trainNetwork(s, readout, h_fc1, sess):
             )
 
         # update the old values
+        s_tminus_1 = s_t
         s_t = s_t1
         t += 1
 
         # save progress every 10000 iterations
-        if t % 10000 == 0:
-            saver.save(sess, 'saved_networks/' + GAME + '-dqn', global_step = t)
-
-        merge = tf.summary.merge_all()
+        if t % 50000 == 0:
+            saver.save(sess, 'saved_networks/' + GAME + '-silent_adv_dqn_training', global_step = t)
 
         # print info
         state = ""
@@ -280,8 +304,7 @@ def trainNetwork(s, readout, h_fc1, sess):
         else:
             state = "train"
 
-        if t % 10 is 0:
-            print("TIMESTEP", t, "/ STATE", state, \
+        print("TIMESTEP", t, "/ STATE", state, \
             "/ EPSILON", epsilon, "/ ACTION", action_index, "/ REWARD", r_t, \
             "/ Q_MAX %e" % np.max(readout_t))
         # write info to files
@@ -294,8 +317,6 @@ def trainNetwork(s, readout, h_fc1, sess):
 
 def playGame():
     sess = tf.InteractiveSession()
-
-
     s, readout, h_fc1 = createNetwork()
     trainNetwork(s, readout, h_fc1, sess)
 
