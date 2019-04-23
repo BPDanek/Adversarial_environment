@@ -7,6 +7,7 @@ import pygame.surfarray as surfarray
 from pygame.locals import *
 from itertools import cycle
 
+"""Cleaner adv env"""
 FPS = 30
 SCREENWIDTH  = 288
 SCREENHEIGHT = 512
@@ -131,10 +132,10 @@ class GameState:
         SCREEN.blit(IMAGES['background'], (0,0))
 
         # draw adversarial pipes if flag given.
-        if input_actions[0] == 1:
+        if adv is True:
             for uPipe, lPipe in zip(self.upperPipes, self.lowerPipes):
-                SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
-                SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
+                SCREEN.blit(IMAGES['adv_pipe'][0], (uPipe['x'], uPipe['y']))
+                SCREEN.blit(IMAGES['adv_pipe'][1], (lPipe['x'], lPipe['y']))
         else:
             for uPipe, lPipe in zip(self.upperPipes, self.lowerPipes):
                 SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
@@ -145,13 +146,12 @@ class GameState:
         # showScore(self.score)
 
         # draw adversarial player if flag given.
-        if input_actions[0] == 1:
-            SCREEN.blit(IMAGES['player'][self.playerIndex],
+        if adv is True:
+            SCREEN.blit(IMAGES['adv_player'][self.playerIndex],
                         (self.playerx, self.playery))
         else:
             SCREEN.blit(IMAGES['player'][self.playerIndex],
                         (self.playerx, self.playery))
-
 
         image_data = pygame.surfarray.array3d(pygame.display.get_surface())
 
@@ -161,11 +161,11 @@ class GameState:
 
         # input_actions[0] == 1: do nothing
         # input_actions[1] == 1: flap the bird
-        if adv is False and show_im is True:
+        if show_im is True:
             pygame.display.update()
 
         #FPSCLOCK.tick()
-        # FPSCLOCK.tick(FPS)
+        FPSCLOCK.tick(FPS)
         #print self.upperPipes[0]['y'] + PIPE_HEIGHT - int(BASEY * 0.2)
         return image_data, reward, terminal
 
