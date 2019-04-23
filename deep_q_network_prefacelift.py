@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Clean version  of DQN_debug.py; paired with wrapped flappy bird (adv support)"""
+"""DQN that was causing bugs before the 17th. Bad algorithm (preprocessing/array manip), AE fixed this version"""
 
 from __future__ import print_function
 
@@ -13,10 +13,6 @@ import random
 import numpy as np
 from collections import deque
 import matplotlib.pyplot as plt
-import os
-from PIL import Image
-
-DEBUG_SAVE_PATH = '~/img_debug'
 
 GAME = 'bird' # the name of the game being played for log files
 ACTIONS = 2 # number of valid actions
@@ -104,16 +100,18 @@ def trainNetwork(s, readout, h_fc1, sess):
     # get the first state by doing nothing and preprocess the image to 80x80x4
     do_nothing = np.zeros(ACTIONS)
     do_nothing[0] = 1
-    x_t, r_0, terminal = game_state.frame_step(do_nothing, adv=False, show_im=False)
+    x_t, r_0, terminal = game_state.frame_step(do_nothing)
 
     # init adv_x_t-1
-    adv_x_t_colored = x_t.copy()
+    adv_x_t_colored = x_t
 
     x_t = cv2.cvtColor(cv2.resize(x_t, (80, 80)), cv2.COLOR_BGR2GRAY)
-    ret, x_t = cv2.threshold(x_t,1,255,cv2.THRESH_BINARY)
+    ret, x_t = cv2.threshold(x_t, 1,255,cv2.THRESH_BINARY)
+    s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
 
-    # copy better
-    s_t = (np.stack((x_t, x_t, x_t, x_t), axis=2)).copy()
+    # init adv_s_t
+    adv_s_t = s_t
+    # s_tminus_1 = s_t
 
     # saving and loading networks
     saver = tf.train.Saver()
@@ -130,11 +128,24 @@ def trainNetwork(s, readout, h_fc1, sess):
     t = 0
     while "flappy bird" != "angry bird":
         # choose an action epsilon greedily
+        # print("s_t_minus_1")
+        # plt.subplot(2, 2, 1)
+        # plt.imshow(s_tminus_1[:, :, 0].transpose((1, 0)))
+        # plt.subplot(2, 2, 2)
+        # plt.imshow(s_tminus_1[:, :, 1].transpose((1, 0)))
+        # plt.subplot(2, 2, 3)
+        # plt.imshow(s_tminus_1[:, :, 2].transpose((1, 0)))
+        # plt.subplot(2, 2, 4)
+        # plt.imshow(s_tminus_1[:, :, 3].transpose((1, 0)))
+        # plt.title("s_t_minus_1")
+        # plt.show()
+
         readout_t = readout.eval(feed_dict={s : [s_t]})[0]
         a_t = np.zeros([ACTIONS])
         action_index = 0
         if t % FRAME_PER_ACTION == 0:
             if random.random() <= epsilon:
+                #print("----------Random Action----------")
                 action_index = random.randrange(ACTIONS)
                 a_t[random.randrange(ACTIONS)] = 1
             else:
@@ -143,18 +154,46 @@ def trainNetwork(s, readout, h_fc1, sess):
         else:
             a_t[0] = 1 # do nothing
 
+        # note:
+        # input_actions[0] == 1: do nothing
+        # input_actions[1] == 1: flap the bird
+
         # scale down epsilon
         if epsilon > FINAL_EPSILON and t > OBSERVE:
             epsilon -= (INITIAL_EPSILON - FINAL_EPSILON) / EXPLORE
 
-        # adversarial information processing at a_t[1] == 1 (target action)
-        # compute adversarial signal and put it into experience replay in place of vanilla signal
+        # run the selected action and observe next state and reward
+        # silent training, to look into network extract weights and test elsewhere
+        x_t1_colored, r_t, terminal = game_state.frame_step(a_t, show_im=False)
+        # plt.title("x_t1_colored")
+        # plt.imshow(x_t1_colored)
+        # plt.show()
+
+        #adv_x_t1_colored = x_t1_colored
+        adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=True, show_im=False)
+        # plt.title("adv_x_t1_colored")
+        # plt.imshow(adv_x_t1_colored)
+        # plt.show()
+
+        # compute s+1
+        x_t1 = cv2.cvtColor(cv2.resize(x_t1_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
+        ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
+        x_t1 = np.reshape(x_t1, (80, 80, 1))
+        # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
+        s_t1 = np.append(x_t1, s_t[:, :, :3], axis=2)
+
+        # plt.title("x_t1")
+        # plt.imshow(x_t1[:,:,0])
+        # plt.show()
+
+        # compute s (from previous iterations info)
+        # current action is target, need to produce adv signal so that we can place it on the exp. replay
         if a_t[1] == 1 and t is not 0:
+
             # plt.title("adv_x_t_colored")
             # plt.imshow(adv_x_t_colored)
             # plt.show()
 
-            # standard preprocessing with raw adversarial data from st (was saved in previous loop)
             adv_x_t = cv2.cvtColor(cv2.resize(adv_x_t_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
             ret, adv_x_t = cv2.threshold(adv_x_t, 1, 255, cv2.THRESH_BINARY)
             adv_x_t = np.reshape(adv_x_t, (80, 80, 1))
@@ -163,11 +202,8 @@ def trainNetwork(s, readout, h_fc1, sess):
             # plt.imshow(adv_x_t[:,:,0])
             # plt.show()
 
-            # this was the culprit
-            # adv_s_t = s_t
+            adv_s_t = s_t
 
-            # retain all other portions of s_t, only augment recent image
-            adv_s_t = s_t.copy()
 
             # plt.subplot(2, 2, 1)
             # plt.imshow(s_t[:, :, 0].transpose((1, 0)))
@@ -180,116 +216,47 @@ def trainNetwork(s, readout, h_fc1, sess):
             # plt.title("s_t_review")
             # plt.show()
 
-            # adv_s_t[:,:,0] = adv_x_t[:,:,0]
+            adv_s_t[:,:,0] = adv_x_t[:,:,0]
 
-            # put adv_s_t onto s_t[0] (recent image)
-            adv_s_t[:, :, 0] = adv_x_t[:, :, 0].copy()
 
-            # plt.subplot(2, 2, 1)
-            # plt.imshow(adv_s_t[:, :, 0].transpose((1, 0)))
-            # plt.subplot(2, 2, 2)
-            # plt.imshow(adv_s_t[:, :, 1].transpose((1, 0)))
-            # plt.subplot(2, 2, 3)
-            # plt.imshow(adv_s_t[:, :, 2].transpose((1, 0)))
-            # plt.subplot(2, 2, 4)
-            # plt.imshow(adv_s_t[:, :, 3].transpose((1, 0)))
+            # plt.subplot(2,2,1)
+            # plt.imshow(adv_s_t[:, :, 0].transpose((1,0)))
+            # plt.subplot(2,2,2)
+            # plt.imshow(adv_s_t[:, :, 1].transpose((1,0)))
+            # plt.subplot(2,2,3)
+            # plt.imshow(adv_s_t[:, :, 2].transpose((1,0)))
+            # plt.subplot(2,2,4)
+            # plt.imshow(adv_s_t[:, :, 3].transpose((1,0)))
             # plt.title("adv_s_t")
             # plt.show()
 
-            # since we've met the adversarial condition, we will simply overwrite the previous s_t
-            # and put this on the memory; ideally we'd learn to relate the adv_image and a_target_t
-            s_t = adv_s_t.copy()
+        # else:
+        #     x_t1 = cv2.cvtColor(cv2.resize(previous_van_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
+        #     ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
+        #     x_t1 = np.reshape(x_t1, (80, 80, 1))
+        #     # s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
+        #     s_t = np.append(x_t1, s_t[:, :, :3], axis=2)
 
-        # run the selected action and observe next state and reward
-        # silent training, to look into network extract weights and test elsewhere
-        x_t1_colored, r_t, terminal = game_state.frame_step(a_t, adv=False, show_im=False)
-
-        # plt.title("x_t1_colored")
-        # plt.imshow(x_t1_colored)
-        # plt.show()
-
-        # x_t1 in this loop, to be used in next loop where it is x_t (raw s_t[0])
-        adv_x_t1_colored, _, _ = game_state.frame_step(a_t, adv=True, show_im=False)
-
-        # plt.title("adv_x_t1_colored")
-        # plt.imshow(adv_x_t1_colored)
-        # plt.show()
-
-        # compute s_t1 (vanilla) to place on stack
-        x_t1 = cv2.cvtColor(cv2.resize(x_t1_colored, (80, 80)), cv2.COLOR_BGR2GRAY)
-        ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
-        x_t1 = np.reshape(x_t1, (80, 80, 1))
-        #s_t1 = np.append(x_t1, s_t[:,:,1:], axis = 2)
-        s_t1 = np.append(x_t1, s_t[:, :, :3], axis=2)
-
-        # plt.title("x_t1")
-        # plt.imshow(x_t1[:,:,0])
-        # plt.show()
 
         # store the transition in D
+        if a_t[1] == 1: # adv action
+            s_t = adv_s_t
         D.append((s_t, a_t, r_t, s_t1, terminal))
 
-        # os write for debugging
-        # # st
-        # for i in range(0, 4, 1):
-        #     im = Image.fromarray(s_t[:,:,i])
-        #     im.save('img_debug/st/' + str(t) + '_' + str(i) + '.png')
-        #
-        # # st1
-        # for i in range(0, 4, 1):
-        #     im = Image.fromarray(s_t1[:, :, i])
-        #     im.save('img_debug/st1/' + str(t) + '_' + str(i) + '.png')
+        # plt.subplot(2, 2, 1)
+        # plt.imshow(s_t[:, :, 0].transpose((1, 0)))
+        # plt.subplot(2, 2, 2)
+        # plt.imshow(s_t[:, :, 1].transpose((1, 0)))
+        # plt.subplot(2, 2, 3)
+        # plt.imshow(s_t[:, :, 2].transpose((1, 0)))
+        # plt.subplot(2, 2, 4)
+        # plt.imshow(s_t[:, :, 3].transpose((1, 0)))
+        # plt.title("s_t on D")
+        # plt.show()
 
-        # show s
-        plt.subplot(4, 2, 1)
-        plt.imshow(s_t[:, :, 0].transpose((1, 0)))
-        plt.subplot(4, 2, 2)
-        plt.imshow(s_t[:, :, 1].transpose((1, 0)))
-        plt.subplot(4, 2, 3)
-        plt.imshow(s_t[:, :, 2].transpose((1, 0)))
-        plt.subplot(4, 2, 4)
-        plt.imshow(s_t[:, :, 3].transpose((1, 0)))
-
-        # show st
-        plt.subplot(4, 2, 5)
-        plt.imshow(s_t1[:, :, 0].transpose((1, 0)))
-        plt.subplot(4, 2, 6)
-        plt.imshow(s_t1[:, :, 1].transpose((1, 0)))
-        plt.subplot(4, 2, 7)
-        plt.imshow(s_t1[:, :, 2].transpose((1, 0)))
-        plt.subplot(4, 2, 8)
-        plt.imshow(s_t1[:, :, 3].transpose((1, 0)))
-        plt.suptitle("st_test, " + str(a_t))
-
-        plt.show()
 
         if len(D) > REPLAY_MEMORY:
-            # os collect
-            test = D.popleft()
-
-            # print s
-            plt.subplot(4, 2, 1)
-            plt.imshow(test[0][:, :, 0].transpose((1, 0)))
-            plt.subplot(4, 2, 2)
-            plt.imshow(test[0][:, :, 1].transpose((1, 0)))
-            plt.subplot(4, 2, 3)
-            plt.imshow(test[0][:, :, 2].transpose((1, 0)))
-            plt.subplot(4, 2, 4)
-            plt.imshow(test[0][:, :, 3].transpose((1, 0)))
-
-            # print st
-            plt.subplot(4, 2, 5)
-            plt.imshow(test[3][:, :, 0].transpose((1, 0)))
-            plt.subplot(4, 2, 6)
-            plt.imshow(test[3][:, :, 1].transpose((1, 0)))
-            plt.subplot(4, 2, 7)
-            plt.imshow(test[3][:, :, 2].transpose((1, 0)))
-            plt.subplot(4, 2, 8)
-            plt.imshow(test[3][:, :, 3].transpose((1, 0)))
-            plt.suptitle("st_test_D, " + str(test[1]))
-
-            plt.show()
-
+            D.popleft()
 
         # needed in future time step
         adv_x_t_colored = adv_x_t1_colored
@@ -323,11 +290,11 @@ def trainNetwork(s, readout, h_fc1, sess):
             )
 
         # update the old values
-        # copy may not be needed
-        s_t = s_t1.copy()
+        s_tminus_1 = s_t
+        s_t = s_t1
         t += 1
 
-        # save progress every 50000 iterations
+        # save progress every 10000 iterations
         if t % 50000 == 0:
             saver.save(sess, 'saved_networks/' + GAME + '-silent_adv_dqn_training', global_step = t)
 
