@@ -1,0 +1,4 @@
+model_checkpoint_path: "bird-trial-30"
+all_model_checkpoint_paths: "bird-trial-10"
+all_model_checkpoint_paths: "bird-trial-20"
+all_model_checkpoint_paths: "bird-trial-30"

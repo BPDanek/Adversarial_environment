@@ -7,7 +7,6 @@ import pygame.surfarray as surfarray
 from pygame.locals import *
 from itertools import cycle
 
-"""Cleaner adv env"""
 FPS = 30
 SCREENWIDTH  = 288
 SCREENHEIGHT = 512
@@ -15,7 +14,7 @@ SCREENHEIGHT = 512
 pygame.init()
 FPSCLOCK = pygame.time.Clock()
 SCREEN = pygame.display.set_mode((SCREENWIDTH, SCREENHEIGHT))
-pygame.display.set_caption('Trojan Flappy Bird')
+pygame.display.set_caption('Flappy Bird')
 
 IMAGES, SOUNDS, HITMASKS = flappy_bird_utils.load()
 PIPEGAPSIZE = 100 # gap between upper and lower part of pipe
@@ -58,9 +57,7 @@ class GameState:
         self.playerFlapAcc =  -9   # players speed on flapping
         self.playerFlapped = False # True when player flaps
 
-    def frame_step(self, input_actions, adv=False, show_im=False):
-
-        # if adv is False:
+    def frame_step(self, input_actions):
         pygame.event.pump()
 
         reward = 0.1
@@ -131,40 +128,18 @@ class GameState:
         # draw sprites
         SCREEN.blit(IMAGES['background'], (0,0))
 
-        # draw adversarial pipes if flag given.
-        if adv is True:
-            for uPipe, lPipe in zip(self.upperPipes, self.lowerPipes):
-                SCREEN.blit(IMAGES['adv_pipe'][0], (uPipe['x'], uPipe['y']))
-                SCREEN.blit(IMAGES['adv_pipe'][1], (lPipe['x'], lPipe['y']))
-        else:
-            for uPipe, lPipe in zip(self.upperPipes, self.lowerPipes):
-                SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
-                SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
+        for uPipe, lPipe in zip(self.upperPipes, self.lowerPipes):
+            SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
+            SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
 
         SCREEN.blit(IMAGES['base'], (self.basex, BASEY))
         # print score so player overlaps the score
         # showScore(self.score)
-
-        # draw adversarial player if flag given.
-        if adv is True:
-            SCREEN.blit(IMAGES['adv_player'][self.playerIndex],
-                        (self.playerx, self.playery))
-        else:
-            SCREEN.blit(IMAGES['player'][self.playerIndex],
-                        (self.playerx, self.playery))
+        SCREEN.blit(IMAGES['player'][self.playerIndex],
+                    (self.playerx, self.playery))
 
         image_data = pygame.surfarray.array3d(pygame.display.get_surface())
-
-        # only do screen update if not using adv flag;
-        # this function is used for producing adv signal for exp. rep, so it is called after the non-adv version is.
-        # this means that we'd call the function twice in a row if we need to make adv signal
-
-        # input_actions[0] == 1: do nothing
-        # input_actions[1] == 1: flap the bird
-        if show_im is True:
-            pygame.display.update()
-
-        #FPSCLOCK.tick()
+        pygame.display.update()
         FPSCLOCK.tick(FPS)
         #print self.upperPipes[0]['y'] + PIPE_HEIGHT - int(BASEY * 0.2)
         return image_data, reward, terminal

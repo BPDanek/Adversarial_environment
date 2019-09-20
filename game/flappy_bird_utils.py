@@ -8,21 +8,11 @@ def load():
             'assets/sprites/redbird-downflap.png'
     )
 
-    # adversarial signal includes blue bird (not red)
-    PLAYER_ADV_PATH = (
-        'assets/sprites/bluebird-upflap.png',
-        'assets/sprites/bluebird-midflap.png',
-        'assets/sprites/bluebird-downflap.png'
-    )
-
     # path of background
     BACKGROUND_PATH = 'assets/sprites/background-black.png'
 
     # path of pipe
     PIPE_PATH = 'assets/sprites/pipe-green.png'
-
-    # adversarial signal related to red pipes instead of green ones
-    PIPE_ADV_PATH = 'assets/sprites/adv-pipe-red.png'
 
     IMAGES, SOUNDS, HITMASKS = {}, {}, {}
 
@@ -65,25 +55,11 @@ def load():
         pygame.image.load(PLAYER_PATH[2]).convert_alpha(),
     )
 
-    # adversarial player
-    IMAGES['adv_player'] = (
-        pygame.image.load(PLAYER_ADV_PATH[0]).convert_alpha(),
-        pygame.image.load(PLAYER_ADV_PATH[1]).convert_alpha(),
-        pygame.image.load(PLAYER_ADV_PATH[2]).convert_alpha(),
-    )
-
     # select random pipe sprites
     IMAGES['pipe'] = (
         pygame.transform.rotate(
             pygame.image.load(PIPE_PATH).convert_alpha(), 180),
         pygame.image.load(PIPE_PATH).convert_alpha(),
-    )
-
-    # adversarial pipe
-    IMAGES['adv_pipe'] = (
-        pygame.transform.rotate(
-            pygame.image.load(PIPE_ADV_PATH).convert_alpha(), 180),
-        pygame.image.load(PIPE_ADV_PATH).convert_alpha(),
     )
 
     # hismask for pipes
