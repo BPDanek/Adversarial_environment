@@ -1,21 +1,11 @@
 #!/usr/bin/env python
 
-# distinction between dqn (vanilla) and this:
-# we want to formulate an addition to state, s, called "delta s", ds, which will cause the Q value of s+ds and a
-# target action, a^t, to be higher than the q value for s+ds and any other action. The implication is that adding ds
-# to our data will result in an action to be drawn. In cases where ds is not added/nothing is changed, we will
-# behave normally.
-# In order to retain the natural behaviour of a DQN controller, we will not be changing the weights or controller
-# for that matter, we will instead minimize the loss between Q(s+ds, a^t) and Q(s+ds, a), where a^t is the target a,
-# and a is any non-target a. Thee loss function will be (some) hinge loss: l(a,b) = max(b - (a + eps), 0), which
-# will essentially enforce the condition: a >= b + eps
-# An informal proof associated with the possibility this will work depends on the fact that our controller learns how
-# to behave well within a certain set of input states from the possible set of states it's been trained on,
-# called (here) the game-possible pixel space. This is the set of frames the game can generate under any scenario
-# within the game. The game-possible pixel space is small, relative to the pixel space, which is a space containing
-# all possible combinations of pixel intensities that a screen can generate. Given that ds blongs in the pixel space,
-# and s belongs in the game-possible pixel space, we can say that s+ds belongs in the pixel space, which the controller
-# may not know how to handle, which, if abused properly may result in a simple adversarial attack.
+# Current scheme: generate d_s here, import it's weight into another, healthy/demo controller.
+# just import weight values, extract tensor, and add to image as subject
+# feed in subject when we want to attack -- it should be invartiant to image features
+    # unless even in adveresarial images the featrues of the image (natural) combined with adv features are functional
+    # THIS IS NOT A BACK DOOR, JUST AN ATTACK
+    # one pixel attack in image 1 --> same pixel attacks a different image?
 
 from __future__ import print_function
 import tensorflow as tf
@@ -165,6 +155,7 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
     # start training
     epsilon = INITIAL_EPSILON
     t = 0
+    past_delta_s_img = np.ndarray((80, 80))
     while "flappy bird" != "angry bird":
         # choose an action epsilon greedily
         readout_t = readout.eval(feed_dict={s : [s_t]})
@@ -214,23 +205,23 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
             # todo: why is this not working the way I expect it to????/ the way it has in the past
             i = 0
             loss = 100 # arbitrary init, needs to be above limit
-            past_delta_s_img = np.ndarray((80, 80))
             while i < 1000 and loss >= 1:
                 summary, loss, delta_s_eval = sess.run([opt, hinge_loss, delta_s], feed_dict={s : s_opt_batch})
                 delta_s_img = np.reshape(delta_s_eval[:, :, 1], (-1, 80, 80, 1))
                 delta_s_img = delta_s_img[0, :, :, 0]
 
-                print("hinge loss at ", i, " : ", loss, "sq. norm", (np.linalg.norm(past_delta_s_img) - np.linalg.norm(delta_s_img)))
-
+                mse_metric = (np.sum(delta_s_img - past_delta_s_img)**2)
+                print("hinge loss at ", i, " : ", loss, " // sq. norm diff", mse_metric)
                 past_delta_s_img = delta_s_img
                 i = i + 1
 
-            plt.imshow(delta_s_img)
-            plt.show()
-            plt.imshow(s_opt_batch[9][:, :, 1])
-            plt.show()
-            plt.imshow(delta_s_img + s_opt_batch[9][:,:,1])
-            plt.show()
+            if mse_metric <= 1:
+                plt.imshow(delta_s_img)
+                plt.show()
+                plt.imshow(s_opt_batch[9][:, :, 1])
+                plt.show()
+                plt.imshow(delta_s_img + s_opt_batch[9][:,:,1])
+                plt.show()
 
             # buffer = tf.summary.image(name="ds_visualize", tensor=delta_s_img)
             # writer.add_summary(buffer, t)
@@ -254,9 +245,9 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
         else:
             state = "train"
 
-        print("TIMESTEP", t, "/ STATE", state, \
-            "/ EPSILON", epsilon, "/ ACTION", action_index, "/ REWARD", r_t, \
-            "/ Q_MAX %e" % np.max(readout_t))
+        # print("TIMESTEP", t, "/ STATE", state, \
+        #     "/ EPSILON", epsilon, "/ ACTION", action_index, "/ REWARD", r_t, \
+        #     "/ Q_MAX %e" % np.max(readout_t))
         # write info to files
         '''
         if t % 10000 <= 100:
