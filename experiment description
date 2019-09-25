@@ -1,4 +1,0 @@
-v3_1: new formulation of attack with lr 1e-11; saving weights to saved_networks.
-v3_2: ''                                1e-10 (Q values were too small in 3_1, started running second experiment
-        saving weights to "second_save_directory"
-        started @ 2.88*10^7 time weights
