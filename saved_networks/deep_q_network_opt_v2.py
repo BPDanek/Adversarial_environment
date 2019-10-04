@@ -47,10 +47,10 @@ def createNetwork():
 
     # new vars for optimization
     initial = tf.truncated_normal(shape=[80, 80, 4], mean=(255.0 / 4), stddev=(255 * (0.01 ** 0.5)))
-    delta_s = tf.Variable(
+    delta_s = tf.math.sigmoid(tf.Variable(
         name="added_perturbation",
         initial_value=initial,
-        trainable=True)
+        trainable=True))
 
     # network weights
     W_conv1 = weight_variable([8, 8, 4, 32])

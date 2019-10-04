@@ -1,6 +1,11 @@
 #!/usr/bin/env python
-# Author:
-# Current scheme:
+
+# Current scheme: generate d_s here, import it's weight into another, healthy/demo controller.
+# just import weight values, extract tensor, and add to image as subject
+# feed in subject when we want to attack -- it should be invartiant to image features
+    # unless even in adveresarial images the featrues of the image (natural) combined with adv features are functional
+    # THIS IS NOT A BACK DOOR, JUST AN ATTACK
+    # one pixel attack in image 1 --> same pixel attacks a different image?
 
 from __future__ import print_function
 import tensorflow as tf
@@ -13,6 +18,10 @@ import numpy as np
 from collections import deque
 import tensorflow.contrib.slim as slim
 import matplotlib.pyplot as plt
+
+# workaround for plt
+import os
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 GAME = 'bird' # the name of the game being played for log files
 ACTIONS = 2 # number of valid actions
@@ -68,10 +77,13 @@ def createNetwork():
     W_fc2 = weight_variable([512, ACTIONS])
     b_fc2 = bias_variable([ACTIONS])
 
+    # tf.convert_to_tensor([-1, 80, 80, 4])
+
     # input layer
     s = tf.placeholder("float", [None, 80, 80, 4])
     tf.expand_dims(delta_s, axis=0)
-    s_opt = s + (delta_s)
+    s_opt = s + delta_s # todo: why cant we add this just like the bias
+    # s_opt = conv2d(s, delta_s, 4)
 
     # hidden layers
     h_conv1 = tf.nn.relu(conv2d(s_opt, W_conv1, 4) + b_conv1)
@@ -91,16 +103,18 @@ def createNetwork():
     # readout layer
     readout = tf.matmul(h_fc1, W_fc2) + b_fc2
 
-    return s, readout, h_fc1, delta_s
+    return s, readout, h_fc1, W_conv1
 
-def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
+def trainNetwork(s, readout, h_fc1, sess, writer, W_conv1):
 
     eps = 1  # Q values are typically 10- 30
     q_noflap = tf.placeholder(shape=(1,), dtype=float)
     q_flap = tf.placeholder(shape=(1,), dtype=float)
     # hinge_loss = tf.nn.relu(q_noflap - q_flap + eps)
+
     hinge_loss = tf.reduce_sum(tf.nn.relu(tf.add(tf.subtract(readout[:,0], readout[:,1]), eps)))
     opt = tf.train.AdamOptimizer(1).minimize(loss=hinge_loss)
+    gradient = tf.gradients(hinge_loss, tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
     # tf.summary.scalar(name="optimizer", tensor=opt)
 
     # # define the cost function
@@ -128,9 +142,8 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
     ret, x_t = cv2.threshold(x_t,1,255,cv2.THRESH_BINARY)
     s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
 
-    # saving and loading networks
-    # restore all weights except the perturbation, this one is kept at a random initialization, and optimized.
-    # all restored weights are frozen.
+    # saving and loading networks\
+    vars = slim.get_variables_to_restore()
     variables_to_restore = slim.get_variables_to_restore(exclude=['added_perturbation', 'beta1_power_1:0', 'beta2_power_1:0'])
     saver = tf.train.Saver(var_list=variables_to_restore)
     sess.run(tf.initialize_all_variables())
@@ -144,7 +157,7 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
     # start training
     epsilon = INITIAL_EPSILON
     t = 0
-    past_delta_s_img = np.ndarray((80, 80))
+    past_delta_s_img = np.ndarray((8,8, 4, 32))
     while "flappy bird" != "angry bird":
         # choose an action epsilon greedily
         readout_t = readout.eval(feed_dict={s : [s_t]})
@@ -195,22 +208,23 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
             i = 0
             loss = 100 # arbitrary init, needs to be above limit
             while i < 1000 and loss >= 1:
-                summary, loss, delta_s_eval = sess.run([opt, hinge_loss, delta_s], feed_dict={s : s_opt_batch})
-                delta_s_img = np.reshape(delta_s_eval[:, :, 1], (-1, 80, 80, 1))
-                delta_s_img = delta_s_img[0, :, :, 0]
+                summary, loss, W_conv1_d, gradient_eval = sess.run([opt, hinge_loss, W_conv1, gradient], feed_dict={s : s_opt_batch})
+                # delta_s_img = np.reshape(W_conv1_d[:, :, 1], (-1, 80, 80, 1))
+                # delta_s_img = delta_s_img[0, :, :, 0]
 
-                mse_metric = (np.sum(delta_s_img - past_delta_s_img)**2)
-                print("hinge loss at ", i, " : ", loss, " // sq. norm diff", mse_metric)
-                past_delta_s_img = delta_s_img
+                mse_metric = (np.sum(W_conv1_d - past_delta_s_img)**2)
+                print("hinge loss at ", i, " : ", loss, " // mse", mse_metric, "// gradient")
+                past_delta_s_img = W_conv1_d
                 i = i + 1
 
-            if mse_metric <= 1:
-                plt.imshow(delta_s_img)
-                plt.show()
-                plt.imshow(s_opt_batch[9][:, :, 1])
-                plt.show()
-                plt.imshow(delta_s_img + s_opt_batch[9][:,:,1])
-                plt.show()
+            # visualization/sanity check
+            # if mse_metric <= 1 or (i% 30 == 0):
+            #     plt.imshow(delta_s_img)
+            #     plt.show()
+            #     plt.imshow(s_opt_batch[9][:, :, 1])
+            #     plt.show()
+            #     plt.imshow(delta_s_img + s_opt_batch[9][:,:,1])
+            #     plt.show()
 
             # write all weights to a savedir
             saver.save(sess, 'delta_s/' + GAME + '-trial', global_step = t)
@@ -235,14 +249,11 @@ def playGame():
     graph = tf.Graph()
     writer = tf.summary.FileWriter('logdir/', graph)
     sess = tf.InteractiveSession(graph=graph)
-    s, readout, h_fc1, delta_s = createNetwork()
-    trainNetwork(s, readout, h_fc1, sess, writer, delta_s)
+    s, readout, h_fc1, W_conv1 = createNetwork()
+    trainNetwork(s, readout, h_fc1, sess, writer, W_conv1)
 
 def main():
     playGame()
 
 if __name__ == "__main__":
     main()
-
-# after digging in the tf src i think i need to better specify the subject of the optimization. maybe implict isnt the way to go.
-# comment prev. src so they are up to date.

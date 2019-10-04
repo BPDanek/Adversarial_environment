@@ -1,8 +1,6 @@
 #!/usr/bin/env python
-# Author:
-# Current scheme:
-
 from __future__ import print_function
+
 import tensorflow as tf
 import cv2
 import sys
@@ -11,8 +9,6 @@ import wrapped_flappy_bird as game
 import random
 import numpy as np
 from collections import deque
-import tensorflow.contrib.slim as slim
-import matplotlib.pyplot as plt
 
 GAME = 'bird' # the name of the game being played for log files
 ACTIONS = 2 # number of valid actions
@@ -25,17 +21,13 @@ REPLAY_MEMORY = 50000 # number of previous transitions to remember
 BATCH = 32 # size of minibatch
 FRAME_PER_ACTION = 1
 
-def adv_weight_variable(shape):
-    initial = tf.truncated_normal(shape, stddev = 0.05)
-    return tf.Variable(initial, trainable=True)
-
 def weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev = 0.01)
-    return tf.Variable(initial, trainable=False)
+    return tf.Variable(initial)
 
 def bias_variable(shape):
     initial = tf.constant(0.01, shape = shape)
-    return tf.Variable(initial, trainable=False)
+    return tf.Variable(initial)
 
 def conv2d(x, W, stride):
     return tf.nn.conv2d(x, W, strides = [1, stride, stride, 1], padding = "SAME")
@@ -44,14 +36,6 @@ def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = "SAME")
 
 def createNetwork():
-
-    # new vars for optimization
-    initial = tf.truncated_normal(shape=[80, 80, 4], mean=(255.0 / 4), stddev=(255 * (0.01 ** 0.5)))
-    delta_s = tf.Variable(
-        name="added_perturbation",
-        initial_value=initial,
-        trainable=True)
-
     # network weights
     W_conv1 = weight_variable([8, 8, 4, 32])
     b_conv1 = bias_variable([32])
@@ -70,11 +54,9 @@ def createNetwork():
 
     # input layer
     s = tf.placeholder("float", [None, 80, 80, 4])
-    tf.expand_dims(delta_s, axis=0)
-    s_opt = s + (delta_s)
 
     # hidden layers
-    h_conv1 = tf.nn.relu(conv2d(s_opt, W_conv1, 4) + b_conv1)
+    h_conv1 = tf.nn.relu(conv2d(s, W_conv1, 4) + b_conv1)
     h_pool1 = max_pool_2x2(h_conv1)
 
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2, 2) + b_conv2)
@@ -91,24 +73,15 @@ def createNetwork():
     # readout layer
     readout = tf.matmul(h_fc1, W_fc2) + b_fc2
 
-    return s, readout, h_fc1, delta_s
+    return s, readout, h_fc1
 
-def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
-
-    eps = 1  # Q values are typically 10- 30
-    q_noflap = tf.placeholder(shape=(1,), dtype=float)
-    q_flap = tf.placeholder(shape=(1,), dtype=float)
-    # hinge_loss = tf.nn.relu(q_noflap - q_flap + eps)
-    hinge_loss = tf.reduce_sum(tf.nn.relu(tf.add(tf.subtract(readout[:,0], readout[:,1]), eps)))
-    opt = tf.train.AdamOptimizer(1).minimize(loss=hinge_loss)
-    # tf.summary.scalar(name="optimizer", tensor=opt)
-
-    # # define the cost function
-    # a = tf.placeholder("float", [None, ACTIONS])
-    # y = tf.placeholder("float", [None])
-    # readout_action = tf.reduce_sum(tf.multiply(readout, a), reduction_indices=1)
-    # cost = tf.reduce_mean(tf.square(y - readout_action))
-    # train_step = tf.train.AdamOptimizer(1e-6).minimize(loss=cost)
+def trainNetwork(s, readout, h_fc1, sess):
+    # define the cost function
+    a = tf.placeholder("float", [None, ACTIONS])
+    y = tf.placeholder("float", [None])
+    readout_action = tf.reduce_sum(tf.multiply(readout, a), axis=1)
+    cost = tf.reduce_mean(tf.square(y - readout_action))
+    train_step = tf.train.AdamOptimizer(1e-6).minimize(cost)
 
     # open up a game state to communicate with emulator
     game_state = game.GameState()
@@ -129,10 +102,7 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
     s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
 
     # saving and loading networks
-    # restore all weights except the perturbation, this one is kept at a random initialization, and optimized.
-    # all restored weights are frozen.
-    variables_to_restore = slim.get_variables_to_restore(exclude=['added_perturbation', 'beta1_power_1:0', 'beta2_power_1:0'])
-    saver = tf.train.Saver(var_list=variables_to_restore)
+    saver = tf.train.Saver()
     sess.run(tf.initialize_all_variables())
     checkpoint = tf.train.get_checkpoint_state("saved_networks")
     if checkpoint and checkpoint.model_checkpoint_path:
@@ -144,10 +114,9 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
     # start training
     epsilon = INITIAL_EPSILON
     t = 0
-    past_delta_s_img = np.ndarray((80, 80))
     while "flappy bird" != "angry bird":
         # choose an action epsilon greedily
-        readout_t = readout.eval(feed_dict={s : [s_t]})
+        readout_t = readout.eval(feed_dict={s : [s_t]})[0]
         a_t = np.zeros([ACTIONS])
         action_index = 0
         if t % FRAME_PER_ACTION == 0:
@@ -178,42 +147,33 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
         if len(D) > REPLAY_MEMORY:
             D.popleft()
 
-        # attack first few frames
-        if (t % 10 is 0) and (t != 0):
-            # generate a ds
-            #delta_s.initializer # since we restore the network variables, we need to init this one separately to
-                                  # save us some struggle with the saver
-
-            # sample a minibatch to optimize on, the entire sequence of frames thus far in the program
-            opt_batch = random.sample(list(D), 10)
+        # only train if done observing
+        if t > OBSERVE:
+            # sample a minibatch to train on
+            minibatch = random.sample(list(D), BATCH)
 
             # get the batch variables
-            s_opt_batch = [d[0] for d in opt_batch] # only take stats form opt batch
-            # plt.imshow(np.ndarray(s_opt_batch)[:,:,1])
-            # plt.show()
-            # todo: why is this not working the way I expect it to????/ the way it has in the past
-            i = 0
-            loss = 100 # arbitrary init, needs to be above limit
-            while i < 1000 and loss >= 1:
-                summary, loss, delta_s_eval = sess.run([opt, hinge_loss, delta_s], feed_dict={s : s_opt_batch})
-                delta_s_img = np.reshape(delta_s_eval[:, :, 1], (-1, 80, 80, 1))
-                delta_s_img = delta_s_img[0, :, :, 0]
+            s_j_batch = [d[0] for d in minibatch]
+            a_batch = [d[1] for d in minibatch]
+            r_batch = [d[2] for d in minibatch]
+            s_j1_batch = [d[3] for d in minibatch]
 
-                mse_metric = (np.sum(delta_s_img - past_delta_s_img)**2)
-                print("hinge loss at ", i, " : ", loss, " // sq. norm diff", mse_metric)
-                past_delta_s_img = delta_s_img
-                i = i + 1
+            y_batch = []
+            readout_j1_batch = readout.eval(feed_dict = {s : s_j1_batch})
+            for i in range(0, len(minibatch)):
+                terminal = minibatch[i][4]
+                # if terminal, only equals reward
+                if terminal:
+                    y_batch.append(r_batch[i])
+                else:
+                    y_batch.append(r_batch[i] + GAMMA * np.max(readout_j1_batch[i]))
 
-            if mse_metric <= 1:
-                plt.imshow(delta_s_img)
-                plt.show()
-                plt.imshow(s_opt_batch[9][:, :, 1])
-                plt.show()
-                plt.imshow(delta_s_img + s_opt_batch[9][:,:,1])
-                plt.show()
-
-            # write all weights to a savedir
-            saver.save(sess, 'delta_s/' + GAME + '-trial', global_step = t)
+            # perform gradient step
+            train_step.run(feed_dict = {
+                y : y_batch,
+                a : a_batch,
+                s : s_j_batch}
+            )
 
         # update the old values
         s_t = s_t1
@@ -223,6 +183,7 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
         if t % 10000 == 0:
             saver.save(sess, 'saved_networks/' + GAME + '-dqn', global_step = t)
 
+        # print info
         state = ""
         if t <= OBSERVE:
             state = "observe"
@@ -231,18 +192,24 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
         else:
             state = "train"
 
+        print("TIMESTEP", t, "/ STATE", state, \
+            "/ EPSILON", epsilon, "/ ACTION", action_index, "/ REWARD", r_t, \
+            "/ Q_MAX %e" % np.max(readout_t))
+        # write info to files
+        '''
+        if t % 10000 <= 100:
+            a_file.write(",".join([str(x) for x in readout_t]) + '\n')
+            h_file.write(",".join([str(x) for x in h_fc1.eval(feed_dict={s:[s_t]})[0]]) + '\n')
+            cv2.imwrite("logs_tetris/frame" + str(t) + ".png", x_t1)
+        '''
+
 def playGame():
-    graph = tf.Graph()
-    writer = tf.summary.FileWriter('logdir/', graph)
-    sess = tf.InteractiveSession(graph=graph)
-    s, readout, h_fc1, delta_s = createNetwork()
-    trainNetwork(s, readout, h_fc1, sess, writer, delta_s)
+    sess = tf.InteractiveSession()
+    s, readout, h_fc1 = createNetwork()
+    trainNetwork(s, readout, h_fc1, sess)
 
 def main():
     playGame()
 
 if __name__ == "__main__":
     main()
-
-# after digging in the tf src i think i need to better specify the subject of the optimization. maybe implict isnt the way to go.
-# comment prev. src so they are up to date.
