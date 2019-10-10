@@ -1,6 +1,0 @@
-model_checkpoint_path: "bird-silent_adv_dqn_training-1450000"
-all_model_checkpoint_paths: "bird-silent_adv_dqn_training-1250000"
-all_model_checkpoint_paths: "bird-silent_adv_dqn_training-1300000"
-all_model_checkpoint_paths: "bird-silent_adv_dqn_training-1350000"
-all_model_checkpoint_paths: "bird-silent_adv_dqn_training-1400000"
-all_model_checkpoint_paths: "bird-silent_adv_dqn_training-1450000"

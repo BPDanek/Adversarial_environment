@@ -14,6 +14,10 @@ from collections import deque
 import tensorflow.contrib.slim as slim
 import matplotlib.pyplot as plt
 
+# https://github.com/openai/spinningup/issues/16
+import os
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
 GAME = 'bird' # the name of the game being played for log files
 ACTIONS = 2 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
@@ -24,6 +28,8 @@ INITIAL_EPSILON = 0.0001 # starting value of epsilon
 REPLAY_MEMORY = 50000 # number of previous transitions to remember
 BATCH = 32 # size of minibatch
 FRAME_PER_ACTION = 1
+
+NUM_CALLS_TO_ANNEAL = 0
 
 def adv_weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev = 0.05)
@@ -43,14 +49,38 @@ def conv2d(x, W, stride):
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize = [1, 2, 2, 1], strides = [1, 2, 2, 1], padding = "SAME")
 
+# taken from ieee:
+# discrete threshold
+# a_s(x) = {1 if x >= THRESHOLD, 0 else}
+
+# continuous approximation
+# a_s(x) = (tanh(beta/2) + tanh(beta(x - THRESHOLD))) / 2tanh(beta/2)
+# beta: changes with time, TBD
+# THRESHOLD: parameter used for CV component of the RL agent
+#   its 1 now, which makes the dark background 0's,  and everything else 255
+def annealing_sigmoid(input):
+    # annealing sigmoid parameters:
+    THRESHOLD = 1
+    NUM_CALLS_TO_ANNEAL =+ 1
+
+    # double beta every 500 timesteps ~ NUM_CALLS_TO_ANNEAL
+    # over time this operation should become closer to discrete
+    beta = 2 ** (np.floor(NUM_CALLS_TO_ANNEAL / 100))
+
+    # actual approximation
+    # sigmoid_transform = (np.tanh(beta / 2) + tf.math.tanh(beta * (input - THRESHOLD))) / (2 * np.tanh(beta / 2))
+    sigmoid_transform = tf.nn.tanh(beta * (input - THRESHOLD))
+    return sigmoid_transform
+
+
 def createNetwork():
 
     # new vars for optimization
     initial = tf.truncated_normal(shape=[80, 80, 4], mean=(255.0 / 4), stddev=(255 * (0.01 ** 0.5)))
-    delta_s = tf.math.sigmoid(tf.Variable(
+    delta_s = tf.Variable(
         name="added_perturbation",
         initial_value=initial,
-        trainable=True))
+        trainable=True)
 
     # network weights
     W_conv1 = weight_variable([8, 8, 4, 32])
@@ -71,7 +101,8 @@ def createNetwork():
     # input layer
     s = tf.placeholder("float", [None, 80, 80, 4])
     tf.expand_dims(delta_s, axis=0)
-    s_opt = s + (delta_s)
+
+    s_opt = tf.nn.softsign(s + delta_s)
 
     # hidden layers
     h_conv1 = tf.nn.relu(conv2d(s_opt, W_conv1, 4) + b_conv1)

@@ -14,6 +14,10 @@ from collections import deque
 import tensorflow.contrib.slim as slim
 import matplotlib.pyplot as plt
 
+# https://github.com/openai/spinningup/issues/16
+import os
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
 GAME = 'bird' # the name of the game being played for log files
 ACTIONS = 2 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
@@ -204,13 +208,13 @@ def trainNetwork(s, readout, h_fc1, sess, writer, delta_s):
                 past_delta_s_img = delta_s_img
                 i = i + 1
 
-            if mse_metric <= 1:
-                plt.imshow(delta_s_img)
-                plt.show()
-                plt.imshow(s_opt_batch[9][:, :, 1])
-                plt.show()
-                plt.imshow(delta_s_img + s_opt_batch[9][:,:,1])
-                plt.show()
+            # if mse_metric <= 1:
+            plt.imshow(delta_s_img)
+            plt.show()
+            plt.imshow(s_opt_batch[9][:, :, 1])
+            plt.show()
+            plt.imshow(delta_s_img + s_opt_batch[9][:,:,1])
+            plt.show()
 
             # write all weights to a savedir
             saver.save(sess, 'delta_s/' + GAME + '-trial', global_step = t)
