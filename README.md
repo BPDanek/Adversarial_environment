@@ -1,14 +1,13 @@
 
 
-####Using Deep Q-Network to Learn How To Play Flappy Bird
+#### Using Deep Q-Network to Learn How To Play Flappy Bird
 
-<img src="./images/demo_2.mov" width="250">
 See images/demo_1, and images/demo_2 for a demo of how this works. 
 
-####Overview
+#### Overview
 This project takes a fully trained reinforcement learning agent [borrowed from here](https://github.com/yenchenlin/DeepLearningFlappyBird), and produces an adversarial example which (when fed back to the agent) draws an action of our choosing.
 
-####Installation Dependencies:
+#### Installation Dependencies:
 * Python 3
 * TensorFlow 1.4
 * pygame
@@ -48,8 +47,11 @@ decisions things) that may cause harm.
 #### Experiments
 
 There were countless experiments, but the relevant structure of the program is as such:
+
 ```deep_q_network.py``` is the original version of the agent
+
 ```DEMO_deep_q_network.py``` is the demo of the adversarial example working (press 1 to insert perturbation live)
+
 ```deep_q_network_v2_2.py``` is the site for manufacturing the adversarial example (removed)
 
 (There will be more documents uploaded to support this in the extremely near future)
