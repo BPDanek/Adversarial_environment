@@ -7,7 +7,7 @@ import pygame.surfarray as surfarray
 from pygame.locals import *
 from itertools import cycle
 
-FPS = 30
+FPS = 60
 SCREENWIDTH  = 288
 SCREENHEIGHT = 512
 
@@ -57,7 +57,21 @@ class GameState:
         self.playerFlapAcc =  -9   # players speed on flapping
         self.playerFlapped = False # True when player flaps
 
+    # used to check if we've pressed the space button yet
+    def read_space(self):
+        space = False
+        # if pygame.event.peek(KEYDOWN):
+        #     print("--")
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    space = True
+        return space
+
     def frame_step(self, input_actions):
+        # we check if the space key was pressed before pumping events
+        space_key = self.read_space()
+
         pygame.event.pump()
 
         reward = 0.1
@@ -142,7 +156,7 @@ class GameState:
         pygame.display.update()
         FPSCLOCK.tick(FPS)
         #print self.upperPipes[0]['y'] + PIPE_HEIGHT - int(BASEY * 0.2)
-        return image_data, reward, terminal
+        return image_data, reward, terminal, space_key
 
 def getRandomPipe():
     """returns a randomly generated pipe"""
