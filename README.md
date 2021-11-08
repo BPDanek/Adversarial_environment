@@ -3,6 +3,8 @@
 #### Using Deep Q-Network to Learn How To Play Flappy Bird
 
 See images/demo_1, and images/demo_2 for a demo of how this works. 
+Presentation Materials: 
+[presentation](https://github.com/BPDanek/Adversarial_environment/blob/9c0a74acafccc1fa97c774705f8c4f538e3969cd/preliminary_results_zero_level_attack.pdf), [poster](https://github.com/BPDanek/Adversarial_environment/blob/9c0a74acafccc1fa97c774705f8c4f538e3969cd/danek_benjamin%20_furi_2.pdf)
 
 #### Overview
 This project takes a fully trained reinforcement learning agent [borrowed from here](https://github.com/yenchenlin/DeepLearningFlappyBird), and produces an adversarial example which (when fed back to the agent) draws an action of our choosing.
